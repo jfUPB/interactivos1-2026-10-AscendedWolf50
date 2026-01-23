@@ -18,10 +18,15 @@ Pues podria combinar las matematicas, el codigo y el diseño para crear nuevos p
 
 ### Actividad 03
 
+### Actividad 04
+#### ¿Por qué no funcionaba el programa con was_pressed() y por qué funciona con is_pressed()? Explica detalladamente.
+Porque was_pressed() solo detecta el momento en el que el boton fue presionado, osea detecta el boton solo ese momento y despues lo "olvida". Is_pressed() siempre detecta el boton mientras este se mantenga presionado, osea el boton va a ser detectado siempre y cuando sea y se mantenga presionado.
+
 ## Bitácora de aplicación 
 
 
 
 ## Bitácora de reflexión
+
 
 
