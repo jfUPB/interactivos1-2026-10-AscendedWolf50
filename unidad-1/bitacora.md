@@ -3,6 +3,7 @@
 ## Bitácora de proceso de aprendizaje
 ### Actividad 01
 #### ¿Qué es un sistema físico interactivo?
+Es cuando se usa herramientas tecnologicas para generar un estimulo o una experiencia en el mundo real.
 
 
 ### Actividad 02
@@ -17,3 +18,4 @@ Pues podria combinar las matematicas, el codigo y el diseño para crear nuevos p
 
 
 ## Bitácora de reflexión
+
