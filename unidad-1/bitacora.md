@@ -17,16 +17,101 @@ Es cuando el artista no hace el arte directamente, sino que desarrolla un sistem
 Pues podria combinar las matematicas, el codigo y el diseño para crear nuevos productos como experiencias que puedan entretener o educar a la comunidad.
 
 ### Actividad 03
+(Actividad guiada)
 
 ### Actividad 04
+
 #### ¿Por qué no funcionaba el programa con was_pressed() y por qué funciona con is_pressed()? Explica detalladamente.
 Porque was_pressed() solo detecta el momento en el que el boton fue presionado, osea detecta el boton solo ese momento y despues lo "olvida". Is_pressed() siempre detecta el boton mientras este se mantenga presionado, osea el boton va a ser detectado siempre y cuando sea y se mantenga presionado.
 
+
 ## Bitácora de aplicación 
+
+#### Crea un programa en p5.js que muestre un círculo en la pantalla. Utiliza los botones A y B del micro:bit para controlar la posición en x del círculo en el canvas de p5.js.
+
+**Micro:Bit**
+``` py
+from microbit import *
+
+uart.init(baudrate=115200)
+display.show(Image.BUTTERFLY)
+
+while True:
+    if button_a.is_pressed():
+        uart.write('A')
+        sleep(500)
+    if button_b.is_pressed():
+        uart.write('B')
+        sleep(500)
+    if accelerometer.was_gesture('shake'):
+        uart.write('C')
+        sleep(500)
+    if uart.any():
+        data = uart.read(1)
+        if data:
+            if data[0] == ord('h'):
+                display.show(Image.HEART)
+                sleep(500)
+                display.show(Image.HAPPY)
+                
+  ```
+**p5.js**
+``` js
+let port;
+let connectBtn;
+let circleX;
+
+function setup() {
+    createCanvas(400, 400);
+    port = createSerial();
+
+    connectBtn = createButton('Connect to micro:bit');
+    connectBtn.position(135, 300);
+    connectBtn.mousePressed(connectBtnClick);
+
+    circleX = width / 2;
+}
+
+function draw() {
+    background(220); 
+
+    // leer serial 
+    while (port.availableBytes() > 0) {
+        let dataRx = port.read(1);
+
+        if (dataRx === 'A') {
+            circleX -= 20;
+        }
+        else if (dataRx === 'B') {
+            circleX += 20;
+        }
+    }
+
+    // límites
+    circleX = constrain(circleX, 50, width - 50);
+
+    // DIBUJAR SIEMPRE
+    fill('white');
+    ellipse(circleX, height / 2, 100, 100);
+
+    // botón
+    connectBtn.html(port.opened() ? 'Disconnect' : 'Connect to micro:bit');
+}
+
+function connectBtnClick() {
+    if (!port.opened()) {
+        port.open('MicroPython', 115200);
+    } else {
+        port.close();
+    }
+}
+```
+
 
 
 
 ## Bitácora de reflexión
+
 
 
 
