@@ -26,6 +26,7 @@ Porque was_pressed() solo detecta el momento en el que el boton fue presionado, 
 
 
 ## Bitácora de aplicación 
+### Actividad 02
 
 #### Crea un programa en p5.js que muestre un círculo en la pantalla. Utiliza los botones A y B del micro:bit para controlar la posición en x del círculo en el canvas de p5.js.
 
@@ -87,10 +88,8 @@ function draw() {
         }
     }
 
-    // límites
-    circleX = constrain(circleX, 50, width - 50);
-
-    // DIBUJAR SIEMPRE
+    
+    
     fill('white');
     ellipse(circleX, height / 2, 100, 100);
 
@@ -106,11 +105,15 @@ function connectBtnClick() {
     }
 }
 ```
+##### Explicacion de codigo
+El codigo esta compuesto de dos partes, una en Micro:Bit el cual ejecuta un bucle infinito en el que lee constantemente los sensores. Cuando el boton A es presionado, el Micro:Bit envia el caracter "A" por el puerto serial, y cuando el boton B es presionado, se envia el caracter "B".
 
-
+El codigo en p5.js ejecuta un bucle de dibujo continuo. En cada frame, el codigo limpia el canvas y dibuja un circulo cuya posicion en x esta almacenada por la variable "circlex".
+Cuando el codigo detecta informacion en el puerto serial, lee los caracteres enviados y segun el caracter modifica la variable "circlex". El caracter "A" mueve el circulo hacia la izquierda y el "B" hacia la derecha.
 
 
 ## Bitácora de reflexión
+
 
 
 
