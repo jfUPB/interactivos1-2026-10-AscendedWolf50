@@ -9,7 +9,7 @@ Es cuando se usa herramientas tecnologicas para generar un estimulo o una experi
 Lo podria usar para diseñar mecanicas de juego en espacios fisicos, como sensores de movimiento para simular una mecanica de sigilo.
 
 
-### Actividad 05
+### Actividad 02
 #### ¿Qué es el diseño/arte generativo?
 Es cuando el artista no hace el arte directamente, sino que desarrolla un sistema (algoritmo) para que el arte se genere de forma autonoma.
 
@@ -26,7 +26,7 @@ Porque was_pressed() solo detecta el momento en el que el boton fue presionado, 
 
 
 ## Bitácora de aplicación 
-### Actividad 02
+### Actividad 05
 
 #### Crea un programa en p5.js que muestre un círculo en la pantalla. Utiliza los botones A y B del micro:bit para controlar la posición en x del círculo en el canvas de p5.js.
 
@@ -113,6 +113,54 @@ Cuando el codigo detecta informacion en el puerto serial, lee los caracteres env
 
 
 ## Bitácora de reflexión
+
+### Actividad 06
+#####  ¿Cómo funciona el sistema físico interactivo de la Actividad 04?
+Primero que todo el codigo en el editor de Micro:Bit esta en un bucle infinito en el que lee constantemente los sensores, cuando se presiona el boton A del Micro:Bit se envia el caracter "A" a traves del puerto serial. 
+Ya en el codigo de p5.js, esta este bloque de codigo:
+``` js
+function setup() {
+        createCanvas(400, 400);
+        background(220);
+        port = createSerial();
+        connectBtn = createButton("Connect to micro:bit");
+        connectBtn.position(80, 300);
+        connectBtn.mousePressed(connectBtnClick);
+```
+Crea el canvas, abre el puerto serial y crea un boton para poder conectarse con el Micro:Bit.
+
+``` js
+    function draw() {
+        background(220);
+
+        if (port.availableBytes() > 0) {
+            let dataRx = port.read(1);
+            if (dataRx == "A") {
+            fill("red");
+            }
+        } else {
+            fill("green");
+        }
+```
+Este bloque dibuja constantemente en la pantalla (cada frame) un cuadrado verde, pero si se presiona el boton A en el Micro:Bit el cuadrado va a cambiar a color rojo por un frame. Cuando el boton deja de ser presionado, el cuadrado vuelve a color verde.
+
+``` js
+ if (!port.opened()) {
+            connectBtn.html("Connect to micro:bit");
+        } else {
+            connectBtn.html("Disconnect");
+        }
+    }
+
+    function connectBtnClick() {
+        if (!port.opened()) {
+            port.open("MicroPython", 115200);
+        } else {
+            port.close();
+        }
+    }
+```
+Este bloque se encarga de conectar con el Micro:Bit en caso de que el puerto haya sido abierto. Si el boton para conectarse al Micro::Bit es presionado (y si el puerto esta abierto) se abre el puerto y establece la velocidad de 115200 para la comunicacion serial.
 
 
 
