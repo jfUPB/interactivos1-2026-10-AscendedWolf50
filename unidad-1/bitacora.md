@@ -9,7 +9,7 @@ Es cuando se usa herramientas tecnologicas para generar un estimulo o una experi
 Lo podria usar para diseñar mecanicas de juego en espacios fisicos, como sensores de movimiento para simular una mecanica de sigilo.
 
 
-### Actividad 02
+### Actividad 05
 #### ¿Qué es el diseño/arte generativo?
 Es cuando el artista no hace el arte directamente, sino que desarrolla un sistema (algoritmo) para que el arte se genere de forma autonoma.
 
@@ -113,6 +113,7 @@ Cuando el codigo detecta informacion en el puerto serial, lee los caracteres env
 
 
 ## Bitácora de reflexión
+
 
 
 
