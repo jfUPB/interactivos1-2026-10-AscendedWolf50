@@ -2,9 +2,6 @@
 
 ## Bitácora de proceso de aprendizaje
 
-
-## Bitácora de aplicación 
-
 ### Actividad 02
 #### Vas a realizar una modificación. Cuando el semáforo esté en verde, si se presiona el botón A, el semáforo debe cambiar inmediatamente a amarillo (sin esperar a que termine el tiempo de verde). El evento que se debe postear es “A” (post_event(“A”)).
 
@@ -73,4 +70,30 @@ while True:
 ```
 
 
+## Bitácora de aplicación 
+### Actividad 04
+#### Ejercicio de la bomba
+
+**Maquina estados en plantUML**
+```
+@startuml
+[*] --> CONFIG
+
+CONFIG --> CONFIG : A (n++)
+CONFIG --> CONFIG : B (n--)
+CONFIG --> ARMED : S (shake)
+
+ARMED --> ARMED : Timeout (n--)
+ARMED --> BOOM : n == 0
+
+BOOM --> CONFIG : A (reset)
+
+@enduml
+```
+<img width="349" height="396" alt="image" src="https://github.com/user-attachments/assets/111908b3-dcf3-43b8-8b21-6ae9680e3d5a" />
+
+
+
+
 ## Bitácora de reflexión
+
