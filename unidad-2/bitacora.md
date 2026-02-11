@@ -2,6 +2,22 @@
 
 ## Bitácora de proceso de aprendizaje
 
+### Actividad 01
+
+#### 1. ¿Cuáles son los estados en el programa?
+Los estados son WaitInOn y WaitInOff.
+
+#### 2. ¿Cuáles son los eventos en el programa?
+El evento de entrada y el evento de Timeout.
+
+#### 3. ¿Cuáles son las acciones en el programa?
+
+- Encender el píxel.
+- Apagar el píxel.
+- Iniciar el temporizador.
+- Reiniciar el temporizador.
+- Cambiar de estado (ON - OFF).
+
 ### Actividad 02
 #### Vas a realizar una modificación. Cuando el semáforo esté en verde, si se presiona el botón A, el semáforo debe cambiar inmediatamente a amarillo (sin esperar a que termine el tiempo de verde). El evento que se debe postear es “A” (post_event(“A”)).
 
@@ -69,6 +85,34 @@ while True:
     utime.sleep_ms(20)
 ```
 
+**Maquina de estados en PlantUML**
+```
+@startuml
+title Semáforo - UML State Machine
+
+[*] --> WaitInRed : Semaforo() constructor
+
+' ===== ESTADO ROJO =====
+WaitInRed : entry /\n  clear()\n  display.set_pixel(x,y,9)\n  myTimer.start(timeInRed)
+WaitInRed --> WaitInGreen : Timeout
+
+' ===== ESTADO VERDE =====
+WaitInGreen : entry /\n  clear()\n  display.set_pixel(x,y+2,9)\n  myTimer.start(timeInGreen)
+WaitInGreen --> WaitInYellow : Timeout
+WaitInGreen --> WaitInYellow : A
+
+' ===== ESTADO AMARILLO =====
+WaitInYellow : entry /\n  clear()\n  display.set_pixel(x,y+1,9)\n  myTimer.start(timeInYellow)
+WaitInYellow --> WaitInRed : Timeout
+
+@enduml
+
+```
+
+<img width="349" height="575" alt="image" src="https://github.com/user-attachments/assets/0b265721-c0b4-46ce-a8f2-1535fcb56221" />
+
+### Actividad 03
+Usé una máquina de estados para controlar las imágenes y el botón A. El timer y el botón solo mandan eventos, y el estado actual decide qué hacer, así el programa no se bloquea y puede responder rápido. Probé que las imágenes cambien en el orden correcto y que al presionar A se salte al estado que corresponde.
 
 ## Bitácora de aplicación 
 ### Actividad 04
@@ -242,5 +286,6 @@ while True:
 
 
 ## Bitácora de reflexión
+
 
 
