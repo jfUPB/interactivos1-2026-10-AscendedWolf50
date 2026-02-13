@@ -288,6 +288,203 @@ while True:
 
 ## Bitácora de reflexión
 
+### Actividad 05
+#### Codigo de Bomba en p5.js
+
+En el codigo de Microbit solo se agrega: 
+``` py
+import uart
+
+uart.init(baudrate=115200)
+```
+para permitir la comunicacion con p5.js.
+
+Y en p5.js el codigo queda asi:
+``` js
+let port;
+let writer;
+
+function setup() {
+  createCanvas(400, 200);
+  textAlign(CENTER, CENTER);
+  textSize(24);
+}
+
+async function connectSerial() {
+  port = await navigator.serial.requestPort();
+  await port.open({ baudRate: 115200 });
+  writer = port.writable.getWriter();
+}
+
+function draw() {
+  background(0);
+  fill(255);
+  text("A = UP | B = DOWN | S = ARM", width/2, height/2);
+}
+
+async function keyPressed() {
+  if (!writer) return;
+
+  let k = key.toUpperCase();
+  if (key === "A" || key === "B" || key === "S") {
+    await writer.write(new TextEncoder().encode(key));
+  }
+}
+
+function mousePressed() {
+  connectSerial();
+}
+```
+Y ahora p5.js se convierte en un controlador externo para generar eventos en la "bomba".
+
+``` py
+from microbit import *
+import utime
+import music
+import uart
+
+uart.init(baudrate=115200)
+
+# -------- Imagenes ----------
+def make_fill_images(on='9', off='0'):
+    imgs = []
+    for n in range(26):
+        rows = []
+        k = 0
+        for y in range(5):
+            row = []
+            for x in range(5):
+                row.append(on if k < n else off)
+                k += 1
+            rows.append(''.join(row))
+        imgs.append(Image(':'.join(rows)))
+    return imgs
+
+FILL = make_fill_images()
+
+# -------- Timer ----------
+class Timer:
+    def __init__(self, owner, event_to_post, duration):
+        self.owner = owner
+        self.event = event_to_post
+        self.duration = duration
+        self.start_time = 0
+        self.active = False
+
+    def start(self, new_duration=None):
+        if new_duration is not None:
+            self.duration = new_duration
+        self.start_time = utime.ticks_ms()
+        self.active = True
+
+    def stop(self):
+        self.active = False
+
+    def update(self):
+        if self.active:
+            if utime.ticks_diff(utime.ticks_ms(), self.start_time) >= self.duration:
+                self.active = False
+                self.owner.post_event(self.event)
+
+# -------- Maquina de estados Task ----------
+class Task:
+    def __init__(self):
+        self.event_queue = []
+        self.timers = []
+        self.count = 20   # initial pixels
+        
+        self.timer = self.createTimer("Timeout", 1000)
+
+        self.estado_actual = None
+        self.transicion_a(self.estado_config)
+
+    def createTimer(self, event, duration):
+        t = Timer(self, event, duration)
+        self.timers.append(t)
+        return t
+
+    def post_event(self, ev):
+        self.event_queue.append(ev)
+
+    def update(self):
+        for t in self.timers:
+            t.update()
+
+        while self.event_queue:
+            ev = self.event_queue.pop(0)
+            if self.estado_actual:
+                self.estado_actual(ev)
+
+    def transicion_a(self, nuevo_estado):
+        if self.estado_actual:
+            self.estado_actual("EXIT")
+        self.estado_actual = nuevo_estado
+        self.estado_actual("ENTRY")
+
+    # -------- Estado "Config" ----------
+    def estado_config(self, ev):
+        if ev == "ENTRY":
+            display.show(FILL[self.count])
+
+        if ev == "A":
+            if self.count < 25:
+                self.count += 1
+                display.show(FILL[self.count])
+
+        if ev == "B":
+            if self.count > 15:
+                self.count -= 1
+                display.show(FILL[self.count])
+
+        if ev == "S":   # shake → arm
+            self.transicion_a(self.estado_Armed)
+
+    # -------- Estado "Armed" ----------
+    def estado_Armed(self, ev):
+        if ev == "ENTRY":
+            self.timer.start(1000)
+
+        if ev == "Timeout":
+            self.count -= 1
+            display.show(FILL[self.count])
+
+            if self.count == 0:
+                self.transicion_a(self.estado_BOOM)
+            else:
+                self.timer.start(1000)
+
+        if ev == "EXIT":
+            self.timer.stop()
+
+    # -------- Estado "BOOM" ----------
+    def estado_BOOM(self, ev):
+     if ev == "ENTRY":
+        display.show(Image.SKULL)
+        music.play(music.WAWAWAWAA)
+
+     if ev == "A":
+        self.count = 20
+        self.transicion_a(self.estado_config)
+
+
+# -------- Loop principal ----------
+task = Task()
+
+while True:
+    if button_a.was_pressed():
+        task.post_event("A")
+    if button_b.was_pressed():
+        task.post_event("B")
+    if accelerometer.was_gesture("shake"):
+        task.post_event("S")
+
+    task.update()
+    utime.sleep_ms(20)
+```
+
+Utilicé comunicación serial (UART) para enviar desde p5.js las letras A, B y S, que simulan los botones UP, DOWN y ARMED del micro:bit. En el micro:bit, los datos recibidos por serial se convierten en eventos mediante post_event(), igual que los botones físicos, por lo que la lógica de la máquina de estados no se altero.
+
+De esta forma, el sistema puede ser controlado tanto con los botones del micro:bit como desde el teclado en p5.js, manteniendo el diseño basado en eventos y temporizadores.
 
 
 
