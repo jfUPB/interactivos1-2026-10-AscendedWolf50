@@ -127,14 +127,15 @@ CONFIG : A (n++)
 CONFIG : B (n--)
 CONFIG --> ARMED : S (shake)
 
-ARMED --> ARMED : Timeout (n--)
+ARMED  : Timeout (n--)
 ARMED --> BOOM : n == 0
 
 BOOM --> CONFIG : A (reset)
 
 @enduml
 ```
-<img width="278" height="410" alt="image" src="https://github.com/user-attachments/assets/1abc6381-54be-4139-899d-c8c0b2388f62" />
+<img width="235" height="410" alt="image" src="https://github.com/user-attachments/assets/5e2ab168-d75a-4491-a3a7-511780214a13" />
+
 
 
 
@@ -286,6 +287,7 @@ while True:
 
 
 ## Bitácora de reflexión
+
 
 
 
