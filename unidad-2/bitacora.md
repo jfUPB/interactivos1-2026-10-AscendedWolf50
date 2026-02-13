@@ -123,8 +123,8 @@ Usé una máquina de estados para controlar las imágenes y el botón A. El time
 @startuml
 [*] --> CONFIG
 
-CONFIG --> CONFIG : A (n++)
-CONFIG --> CONFIG : B (n--)
+CONFIG : A (n++)
+CONFIG : B (n--)
 CONFIG --> ARMED : S (shake)
 
 ARMED --> ARMED : Timeout (n--)
@@ -134,7 +134,7 @@ BOOM --> CONFIG : A (reset)
 
 @enduml
 ```
-<img width="349" height="396" alt="image" src="https://github.com/user-attachments/assets/111908b3-dcf3-43b8-8b21-6ae9680e3d5a" />
+<img width="278" height="410" alt="image" src="https://github.com/user-attachments/assets/1abc6381-54be-4139-899d-c8c0b2388f62" />
 
 
 
@@ -286,6 +286,7 @@ while True:
 
 
 ## Bitácora de reflexión
+
 
 
 
