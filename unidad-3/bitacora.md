@@ -9,7 +9,8 @@
 ## Bitácora de aplicación 
 
 ### Actividad 04
-
+**Sketch.js**
+``` js
 // --- CONSTANTES Y CONFIGURACIÓN ORIGINAL ---
 const TIMER_LIMITS = {
   min: 15,
@@ -178,7 +179,117 @@ function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
 
+```
+**index.html**
+``` html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <title>Sketch</title>
+
+    <link rel="stylesheet" type="text/css" href="style.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.js"></script>
+    
+    <script src="https://unpkg.com/@gohai/p5.webserial@latest/libraries/p5.webserial.js"></script>
+  </head>
+
+  <body>
+    <script src="fsm.js"></script>
+    <script src="sketch.js"></script>
+  </body>
+</html>
+```
+
+**fsm.js**
+``` js
+const ENTRY = "ENTRY";
+const EXIT = "EXIT";
+
+class Timer {
+  constructor(owner, eventToPost, duration) {
+    this.owner = owner;
+    this.event = eventToPost;
+    this.duration = duration;
+    this.startTime = 0;
+    this.active = false;
+  }
+
+  start(newDuration = null) {
+    if (newDuration !== null) this.duration = newDuration;
+    this.startTime = millis();
+    this.active = true;
+  }
+
+  stop() {
+    this.active = false;
+  }
+
+  update() {
+    if (this.active && millis() - this.startTime >= this.duration) {
+      this.active = false;
+      this.owner.postEvent(this.event);
+    }
+  }
+}
+
+class FSMTask {
+  constructor() {
+    this.queue = [];
+    this.timers = [];
+    this.state = null;
+  }
+
+  postEvent(ev) {
+    this.queue.push(ev);
+  }
+
+  addTimer(event, duration) {
+    let t = new Timer(this, event, duration);
+    this.timers.push(t);
+    return t;
+  }
+
+  transitionTo(newState) {
+    if (this.state) this.state(EXIT);
+    this.state = newState;
+    this.state(ENTRY);
+  }
+
+  update() {
+    for (let t of this.timers) {
+      t.update();
+    }
+    while (this.queue.length > 0) {
+      let ev = this.queue.shift();
+      if (this.state) this.state(ev);
+    }
+  }
+}
+```
+**Micro:Bit**
+``` py
+from microbit import *
+
+uart.init(baudrate=9600)
+display.show(Image.BUTTERFLY)
+
+while True:
+    if button_a.was_pressed():
+        uart.write('A')
+       
+    if button_b.was_pressed():
+        uart.write('B')
+        
+    if accelerometer.was_gesture('shake'):
+        uart.write('S')
+        
+ ```   
+                
 ## Bitácora de reflexión
+
 
 
