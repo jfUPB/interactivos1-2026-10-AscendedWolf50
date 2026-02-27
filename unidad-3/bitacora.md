@@ -573,6 +573,65 @@ estado_armed = (ev) => {
 };
  ```  
 ## Bitácora de reflexión
+### Actividad 05
+**Micro:bit emisor**
+``` py
+from microbit import *
+import radio
+
+# Configura el grupo (elige un número del 1 al 255, igual que tu compañero)
+radio.config(group=15) 
+radio.on()
+
+display.show(Image.SQUARE)
+
+while True:
+    if button_a.was_pressed():
+        radio.send('A')
+        display.show('A')
+        sleep(200)
+    
+    if button_b.was_pressed():
+        radio.send('B')
+        display.show('B')
+        sleep(200)
+        
+    if accelerometer.was_gesture('shake'):
+        radio.send('S')
+        display.show('S')
+        sleep(200)
+    
+    display.show(Image.SQUARE)
+```
+**Micro:bit receptor**
+``` py
+from microbit import *
+import radio
+
+# IMPORTANTE: El grupo debe ser el mismo que el del remoto
+radio.config(group=15)
+radio.on()
+
+uart.init(baudrate=9600)
+display.show(Image.BUTTERFLY)
+
+while True:
+    # 1. Escuchar si llega algo por radio (del remoto)
+    mensaje_remoto = radio.receive()
+    
+    if mensaje_remoto:
+        # Si llega 'A', 'B' o 'S', lo reenvía a p5.js por cable
+        uart.write(mensaje_remoto)
+        display.scroll(mensaje_remoto, delay=100)
+
+    # 2. (Opcional) También puede controlarse localmente
+    if button_a.was_pressed():
+        uart.write('A')
+    if button_b.was_pressed():
+        uart.write('B')
+    if accelerometer.was_gesture('shake'):
+        uart.write('S')
+```
 
 
 
