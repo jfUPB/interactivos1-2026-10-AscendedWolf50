@@ -9,6 +9,7 @@
 ## Bitácora de aplicación 
 
 ### Actividad 04
+#### Codigo original funcionando con Micro:Bit: 
 **Sketch.js**
 ``` js
 // --- CONSTANTES Y CONFIGURACIÓN ORIGINAL ---
@@ -290,6 +291,7 @@ while True:
  ```   
                 
 ## Bitácora de reflexión
+
 
 
 
