@@ -3,8 +3,45 @@
 ## Bitácora de proceso de aprendizaje
 ### Actividad 01
 
+**Desarrollo Técnico**
+Ciclo Normal: Se implementaron tres estados base (waitInRed, waitInGreen, waitInYellow) con tiempos diferenciados para simular un comportamiento real.
+
+Modo Peatonal (Botón A): Se configuró una interrupción en el estado verde que fuerza la transición al estado amarillo. Esto garantiza la seguridad vial al proporcionar un tiempo de advertencia antes de cambiar a rojo.
+
+Modo Nocturno (Botón B): Se diseñó una sub-lógica de parpadeo mediante dos estados (nocturno_on y nocturno_off) con ciclos de 500ms.
+
+Retorno al Sistema: Se estableció el Botón A como disparador para reiniciar el flujo hacia el estado de seguridad inicial (waitInRed).
+
+**Aprendizaje Clave**
+Arquitectura de Software: La modularización del código facilita el mantenimiento y la legibilidad, especialmente en sistemas embebidos con recursos limitados
+
+### Actividad 02
+
+Pausa y Reanudación Inteligente: Usamos el mismo botón A para dos funciones. Al presionarlo, el código revisa si el myTimer está activo o no. Si está andando, lo frena con .stop(); si estaba quieto, lo despierta con .start().
+
+Memoria de Secuencia: Para que el micro:bit "entendiera" el comando A-B-A, creamos una lista llamada self.history. Cada vez que tocas un botón en modo armado, el sistema lo anota en esa lista y solo guarda los últimos tres movimientos.
+
+El "Escape": Si esa lista de historial coincide exactamente con ["A", "B", "A"], el temporizador rompe su ciclo y nos manda directo al estado de configuración.
+
+**Obstáculos y Soluciones**
+El conflicto del Botón A: Al principio, presionar "A" para la secuencia también disparaba la pausa. Lo solucionamos poniendo la verificación de la secuencia antes que la de la pausa y usando un return para que, si se detecta el escape, no haga nada más.
+
+Limpieza de datos: Me di cuenta de que si tocaba botones antes de empezar, esos movimientos se quedaban en la memoria. La solución fue limpiar el self.history justo en el momento del ENTRY al estado armado.
 
 ### Actividad 03
+1. **(fsm.js)**
+Gestión Asíncrona: La clase Timer usa millis() para que el tiempo sea exacto sin detener las animaciones de p5.js.
+
+Cola de Eventos: FSMTask organiza las acciones en una fila (queue), evitando que los comandos se solapen o se pierdan.
+
+Ciclo de Vida: Los eventos ENTRY y EXIT garantizan que cada estado limpie sus datos al terminar y prepare los nuevos al empezar.
+
+2. **(sketch.js)**
+Configuración: Estado interactivo para definir el tiempo (rango 15-25s) mediante teclas.
+
+Armed (Conteo): Lógica principal que resta segundos en cada TICK del temporizador.
+
+Timeout: Estado de bloqueo final que solo permite reiniciar el ciclo.
 
 ## Bitácora de aplicación 
 
@@ -536,6 +573,7 @@ estado_armed = (ev) => {
 };
  ```  
 ## Bitácora de reflexión
+
 
 
 
