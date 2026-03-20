@@ -422,3 +422,5 @@ while True:
     sleep(100) # Frecuencia de 10 Hz
 ```
 ## Bitácora de reflexión
+### Actividad 03 
+<img width="1791" height="402" alt="image" src="https://github.com/user-attachments/assets/74376d76-7c83-4b20-aad1-9b49eab412e2" />
