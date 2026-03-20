@@ -21,51 +21,167 @@
 
 **MicrobitV2Adapter.js**
 ``` js
-const BaseAdapter = require('./BaseAdapter');
+const { SerialPort } = require("serialport");
+const BaseAdapter = require("./BaseAdapter");
+
+class ParseError extends Error {}
+
+function parseFrame(line) {
+
+  if (!line.startsWith("$")) {
+    throw new ParseError("Frame must start with $");
+  }
+
+  const body = line.slice(1);
+  const parts = body.split("|");
+
+  const data = {};
+
+  for (const p of parts) {
+    const [k, v] = p.split(":");
+    data[k] = v;
+  }
+
+  const x = parseInt(data.X);
+  const y = parseInt(data.Y);
+  const a = parseInt(data.A);
+  const b = parseInt(data.B);
+  const chk = parseInt(data.CHK);
+
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    throw new ParseError("Invalid accelerometer data");
+  }
+
+  if (![0, 1].includes(a) || ![0, 1].includes(b)) {
+    throw new ParseError("Invalid button values");
+  }
+
+  const calc = Math.abs(x) + Math.abs(y) + a + b;
+
+  if (calc !== chk) {
+    throw new ParseError(`Checksum mismatch expected ${chk} got ${calc}`);
+  }
+
+  return {
+    x,
+    y,
+    btnA: a === 1,
+    btnB: b === 1
+  };
+}
 
 class MicrobitV2Adapter extends BaseAdapter {
-    constructor() {
-        super();
-    }
 
-    processData(dataString) {
-        // 1. Quitar los espacios y saltos de línea
-        const cleanTrama = dataString.trim();
+  constructor({ path, baud = 115200, verbose = false } = {}) {
+    super();
+    this.path = path;
+    this.baud = baud;
+    this.port = null;
+    this.buf = "";
+    this.verbose = verbose;
+  }
 
-        // 2. Verificar que la trama empiece con "$"
-        if (!cleanTrama.startsWith('$')) {
-            return; 
-        }
+  async connect() {
 
-        // 3. Quitar el "$" del principio
-        const tramaSinDolar = cleanTrama.substring(1);
+    if (this.connected) return;
+    if (!this.path) throw new Error("serialPort is required");
 
-        // 4. Separar los pedazos usando el pipe "|"
-        const partes = tramaSinDolar.split('|');
+    this.port = new SerialPort({
+      path: this.path,
+      baudRate: this.baud,
+      autoOpen: false,
+    });
 
-        // 5. Extraer los valores numéricos
-        const valorX = parseInt(partes[1].split(':')[1]);
-        const valorY = parseInt(partes[2].split(':')[1]);
-        const valorA = parseInt(partes[3].split(':')[1]);
-        const valorB = parseInt(partes[4].split(':')[1]);
-        const valorCHK = parseInt(partes[5].split(':')[1]);
+    await new Promise((resolve, reject) => {
+      this.port.open((err) => (err ? reject(err) : resolve()));
+    });
 
-        // Validar el Checksum
-        const miChecksumCalculado = Math.abs(valorX) + Math.abs(valorY) + valorA + valorB;
+    this.connected = true;
+    this.onConnected?.(`serial open ${this.path} @${this.baud}`);
 
-        if (miChecksumCalculado !== valorCHK) {
-            console.warn("⚠️ Trama corrupta descartada. CHK esperado:", valorCHK, "Calculado:", miChecksumCalculado);
-            return; 
-        }
+    this.port.on("data", (chunk) => this._onChunk(chunk));
+    this.port.on("error", (err) => this._fail(err));
+    this.port.on("close", () => this._closed());
+  }
 
-        // 6. Emitir los datos limpios
-        this.onData?.({
-            x: valorX,
-            y: valorY,
-            btnA: valorA === 1,
-            btnB: valorB === 1
+  async disconnect() {
+
+    if (!this.connected) return;
+
+    this.connected = false;
+
+    if (this.port && this.port.isOpen) {
+      await new Promise((resolve, reject) => {
+        this.port.close((err) => {
+          if (err) reject(err);
+          else resolve();
         });
+      });
     }
+
+    this.port = null;
+    this.buf = "";
+
+    this.onDisconnected?.("serial closed");
+  }
+
+  getConnectionDetail() {
+    return `serial open ${this.path}`;
+  }
+
+  _onChunk(chunk) {
+
+    this.buf += chunk.toString("utf8");
+
+    let idx;
+
+    while ((idx = this.buf.indexOf("\n")) >= 0) {
+
+      const line = this.buf.slice(0, idx).trim();
+      this.buf = this.buf.slice(idx + 1);
+
+      if (!line) continue;
+
+      try {
+
+        const parsed = parseFrame(line);
+
+        this.onData?.(parsed);
+
+      } catch (e) {
+
+        if (e instanceof ParseError) {
+
+          if (this.verbose) {
+            console.warn("Corrupt frame:", e.message, "raw:", line);
+          }
+
+        } else {
+
+          this._fail(e);
+
+        }
+      }
+    }
+
+    if (this.buf.length > 4096) this.buf = "";
+  }
+
+  _fail(err) {
+    this.onError?.(String(err?.message || err));
+    this.disconnect();
+  }
+
+  _closed() {
+
+    if (!this.connected) return;
+
+    this.connected = false;
+    this.port = null;
+    this.buf = "";
+
+    this.onDisconnected?.("serial closed (event)");
+  }
 }
 
 module.exports = MicrobitV2Adapter;
@@ -81,6 +197,7 @@ module.exports = MicrobitV2Adapter;
 
 **drawRunning():** Encargada del renderizado "tonto". Solo lee las variables calculadas previamente y ejecuta las funciones de dibujo (beginShape, trigonometría con sin y cos).
 
+**Sketch.js**
 ``` js
 const EVENTS = {
     CONNECT: "CONNECT",
@@ -94,13 +211,19 @@ class PainterTask extends FSMTask {
     constructor() {
         super();
 
-        // Variables de estado para el arte generativo
-        this.circleResolution = 2; 
-        this.radius = 0;           
-        this.isDrawing = false;    
-        this.isFilled = false;     
+        this.c = color(181, 157, 0);
+        this.lineSize = 100;
+        this.angle = 0;
+        this.clickPosX = 0;
+        this.clickPosY = 0;
 
         this.rxData = {
+            x: 0,
+            y: 0,
+            btnA: false,
+            btnB: false,
+            prevA: false,
+            prevB: false,
             ready: false
         };
 
@@ -119,12 +242,18 @@ class PainterTask extends FSMTask {
     estado_corriendo = (ev) => {
         if (ev.type === "ENTRY") {
             noCursor();
-            // Estilos iniciales de la pieza de arte original
-            strokeWeight(2);
-            stroke(0, 25);
+            strokeWeight(0.75);
             background(255);
             console.log("Microbit ready to draw");
-            this.rxData.ready = false;
+            this.rxData = {
+                x: 0,
+                y: 0,
+                btnA: false,
+                btnB: false,
+                prevA: false,
+                prevB: false,
+                ready: false
+            };
         }
 
         else if (ev.type === EVENTS.DISCONNECT) {
@@ -135,6 +264,14 @@ class PainterTask extends FSMTask {
             this.updateLogic(ev.payload);
         }
 
+        else if (ev.type === EVENTS.KEY_PRESSED) {
+            this.handleKeys(ev.keyCode, ev.key);
+        }
+
+        else if (ev.type === EVENTS.KEY_RELEASED) {
+            this.handleKeyRelease(ev.keyCode, ev.key);
+        }
+
         else if (ev.type === "EXIT") {
             cursor();
         }
@@ -142,16 +279,25 @@ class PainterTask extends FSMTask {
 
     updateLogic(data) {
         this.rxData.ready = true;
+        this.rxData.x = map(data.x,-2048,2047,0,width);
+        this.rxData.y = map(data.y,-2048,2047,0,height);
+        this.rxData.btnA = data.btnA;
+        this.rxData.btnB = data.btnB;
 
-        // 1. Mapear el acelerómetro Y a la resolución (de 2 a 10 lados)
-        this.circleResolution = int(map(data.y, -2048, 2047, 2, 10));
+        if (this.rxData.btnA && !this.prevA) {
+            this.lineSize = random(50, 160);
+            this.clickPosX = this.rxData.x;
+            this.clickPosY = this.rxData.y;
+            console.log("A pressed");
+        }
 
-        // 2. Mapear el acelerómetro X al radio (-width/2 a width/2)
-        this.radius = map(data.x, -2048, 2047, -width / 2, width / 2);
+        if (!this.rxData.btnB && this.prevB) {
+            this.c = color(random(255), random(255), random(255), random(80, 100));
+            console.log("B released");
+        }
 
-        // 3. Guardar el estado de los botones
-        this.isDrawing = data.btnA; // Controla si se dibuja (como click del mouse)
-        this.isFilled = data.btnB;  // Controla el relleno (como presionar tecla)
+        this.prevA = this.rxData.btnA;
+        this.prevB = this.rxData.btnB;
     }
 }
 
@@ -198,7 +344,6 @@ function setup() {
         else bridge.open();
     });
 
-    // Conectar el estado de la FSM con la función de renderizado tonto
     renderer.set(painter.estado_corriendo, drawRunning);
 }
 
@@ -208,28 +353,37 @@ function draw() {
 }
 
 function drawRunning() {
-    // Si no han llegado datos válidos, no hacemos nada
-    if (!painter.rxData.ready) return;
+    let mb = painter.rxData;
 
-    // Solo dibujamos si el botón A está presionado
-    if (painter.isDrawing) {
+    if (!mb.ready) return;
+
+    // equivalente a mouseIsPressed (botón A)
+    if (mb.btnA) {
         push();
         translate(width / 2, height / 2);
 
-        let angle = TAU / painter.circleResolution;
+        // equivalente a mouseY (resolución del círculo)
+        let circleResolution = int(map(mb.y + 100, 0, height, 2, 10));
 
-        // Si el botón B está presionado, rellenamos de color
-        if (painter.isFilled) {
+        // equivalente a mouseX (radio)
+        let radius = mb.x - width / 2;
+
+        let angle = TWO_PI / circleResolution;
+
+        // equivalente a keyIsPressed (botón B activa relleno)
+        if (mb.btnB) {
             fill(34, 45, 122, 50);
         } else {
             noFill();
         }
 
-        // Trazado de la figura geométrica
+        stroke(0, 25);
+        strokeWeight(2);
+
         beginShape();
-        for (let i = 0; i <= painter.circleResolution; i++) {
-            let x = cos(angle * i) * painter.radius;
-            let y = sin(angle * i) * painter.radius;
+        for (let i = 0; i <= circleResolution; i++) {
+            let x = cos(angle * i) * radius;
+            let y = sin(angle * i) * radius;
             vertex(x, y);
         }
         endShape();
@@ -242,6 +396,29 @@ function windowResized() {
     resizeCanvas(windowWidth, windowHeight);
 }
 ```
+**Micro:Bit** 
+```
+from microbit import *
+import time
 
-Se utilizó la extensión Live Server en VS Code para montar un servidor web estático en el puerto 5500. Esto permitió cargar la interfaz gráfica (index.html y el lienzo de p5.js) correctamente, desde donde el script establece la conexión limpia por debajo con el puerto 8081.
+uart.init(baudrate=115200)
+
+while True:
+    t = time.ticks_ms()
+    x = accelerometer.get_x()
+    y = accelerometer.get_y()
+    
+    # Convertimos los booleanos (True/False) a enteros (1/0) como pide la guía
+    a = 1 if button_a.is_pressed() else 0
+    b = 1 if button_b.is_pressed() else 0
+    
+    # Calculamos el Checksum sumando los valores absolutos
+    chk = abs(x) + abs(y) + a + b
+    
+    # Formateamos la trama exactamente como exige la Actividad 02
+    trama = "$T:{}|X:{}|Y:{}|A:{}|B:{}|CHK:{}\n".format(t, x, y, a, b, chk)
+    
+    uart.write(trama)
+    sleep(100) # Frecuencia de 10 Hz
+```
 ## Bitácora de reflexión
