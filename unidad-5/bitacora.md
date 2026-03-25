@@ -29,6 +29,7 @@ Porque puede ser interpretado como otro valor en lugar de funcionar como un "sep
 
 ## Bitácora de aplicación 
 ### Actividad 02
+**Micro:bit**
 ```py
 from microbit import *
 import struct
