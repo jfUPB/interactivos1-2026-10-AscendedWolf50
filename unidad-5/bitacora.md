@@ -486,6 +486,23 @@ main().catch((e) => {
 });
 ```
 
+### Implementación del Protocolo Binario
+
+**1. Configuración inicial y errores:**
+* Al intentar ejecutar el servidor (`node bridgeServer.js --device microbit-bin`), arrojó un error por la falta del módulo `ws`. Lo solucioné corriendo `npm install` para descargar las dependencias.
+* Luego, obtuve un error de ruta porque estaba ejecutando el comando desde la carpeta de descargas. Lo arreglé usando `cd` para ingresar al directorio correcto del repositorio.
+
+**2. Pruebas de compatibilidad:**
+* Intenté probar primero el adaptador de la Unidad 4 (`MicrobitV2Adapter`), pero empezó a descartar los datos marcándolos como "trama corrupta". 
+* Esto me confirmó que el firmware del micro:bit y el adaptador en Node.js deben hablar exactamente el mismo idioma. El adaptador V2 esperaba texto con `$` y `|`, por lo que tuve que flashear el código Python correspondiente en el hardware para que el puente funcionara.
+
+**3. Desarrollo del adaptador binario:**
+Pasar de ASCII a binario implicó dejar de manipular *strings* y empezar a usar un `Buffer` de memoria en Node.js:
+* **Framing:** Como en binario no hay saltos de línea (`\n`), implementé la lógica para buscar siempre el byte de inicio `0xAA`.
+* **Checksum y extracción:** Al tener los 8 bytes del paquete en el buffer, el código suma los datos y aplica módulo 256. Si el resultado coincide con el byte de *checksum* recibido, se extraen los valores numéricos utilizando el método `readInt16BE` (Big-Endian).
+
+**4. Evidencias de funcionamiento:**
+
 
 
 ## Bitácora de reflexión
