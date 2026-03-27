@@ -502,6 +502,8 @@ Pasar de ASCII a binario implicó dejar de manipular *strings* y empezar a usar 
 * **Checksum y extracción:** Al tener los 8 bytes del paquete en el buffer, el código suma los datos y aplica módulo 256. Si el resultado coincide con el byte de *checksum* recibido, se extraen los valores numéricos utilizando el método `readInt16BE` (Big-Endian).
 
 **4. Evidencias de funcionamiento:**
+**Sistema funcionando**
+<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/1020883c-8e4d-4605-9f4d-2bbc9653bec2" />
 
 
 
