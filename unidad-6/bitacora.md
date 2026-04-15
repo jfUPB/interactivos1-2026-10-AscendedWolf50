@@ -1,7 +1,33 @@
 # Unidad 6
 
 ## Bitácora de proceso de aprendizaje
+### Actividad 01
+**1. Diferencia entre recibir un mensaje y ejecutarlo:**
+Recibir es el acto físico de que el dato llegue por la red (capa de transporte). Ejecutar es activar la animación en la pantalla en el momento exacto en que debe ocurrir (capa de scheduling o estado).
 
+**2. Necesidad del timestamp en sistemas audiovisuales:**
+Garantiza la sincronización perfecta. Si hay lag o latencia en la red, el timestamp le dice al sistema: "No me dibujes cuando llegué, dibújame exactamente en este milisegundo para coincidir con el audio".
+
+**3. Aspectos intactos de la arquitectura (U4 y U5):**
+Se mantiene la separación de responsabilidades: sigue existiendo una fuente de datos externa, un Adapter que traduce esos datos, un Bridge que los transporta y un Frontend que solo lee el estado limpio para dibujar.
+
+**4. El protocolo de Strudel como "dispositivo":**
+Su protocolo consiste en enviar mensajes empaquetados por WebSocket, conteniendo una dirección (ej. /dirt/play), un arreglo de argumentos (sonido, ciclos, efectos) y una marca de tiempo absoluta.
+
+**5. Variables mínimas a extraer para la visualización:**
+Se necesitan tres básicas: s (el tipo de sonido, para decidir la forma o color), delta o duración (para el ciclo de vida de la animación), y el timestamp (para saber el instante exacto de inicio).
+
+**6. Problema que resuelve la cola de eventos:**
+Resuelve la latencia y la inestabilidad de la red. Almacena las "notas futuras" en orden, evitando que un pico de lag haga que todas las animaciones se disparen a destiempo o amontonadas.
+
+**7. Por qué la cola no pertenece al bridge:**
+Porque el Bridge debe ser un simple mensajero (agnóstico a lo que transporta). El manejo del tiempo y el momento de dibujar dependen estrictamente del reloj interno del Frontend que es quien "interpreta" la partitura.
+
+**8. Papel del Adapter en las Unidades 4 y 5:**
+Su función era actuar como traductor: tomaba datos "sucios" o crudos del hardware (cadenas ASCII o tramas de bytes) y los convertía en variables limpias para el sistema.
+
+**9. Adapter necesario para Strudel:**
+Un Adapter que intercepte el mensaje JSON complejo de Strudel, busque dentro de su lista plana de args y construya un objeto de datos estandarizado y fácil de leer para el Frontend.
 
 ## Bitácora de aplicación 
 ### Actividad 02
