@@ -286,7 +286,30 @@ function windowResized() { resizeCanvas(windowWidth, windowHeight); }
 </html>
 
 ```
+#### Documenta en tu bitacora
+**1. Cómo configuraste Strudel para emitir eventos:**
+Usé la función .osc() al final del patrón musical. La dejé vacía (pat.osc()) para evitar errores de sintaxis en Strudel, aprovechando que por defecto envía los datos al puerto 8080 del localhost.
+
+**2. Qué estructura final de mensaje decidiste usar:**
+Un JSON estandarizado con tres claves principales: type (origen), timestamp (tiempo de ejecución) y payload (datos útiles como el sonido s y la duración delta).
+
+**3. Cómo conectaste bridgeClient.js, FSMTask, updateLogic y drawRunning:**
+bridgeClient recibe el JSON y lo envía a la cola. updateLogic revisa si el Date.now() ya alcanzó el timestamp del evento y lo mueve a la lista de animaciones activas. Finalmente, drawRunning lee esa lista y dibuja.
+
+**4. Cómo separaste recepción, cola temporal y renderizado:**
+Asignando responsabilidad única: bridgeClient.js solo maneja red; updateLogic es el único que maneja arreglos y calcula el tiempo; y las funciones de dibujo ignoran la red/tiempo y solo pintan lo que reciben.
+
+**5. Qué pruebas hiciste para verificar la sincronización:**
+Ejecuté un ritmo básico de Strudel (bombo y caja) y observé si el destello visual coincidía con el ataque del sonido. Usé la variable LATENCY_CORRECTION para ajustar cualquier pequeño desfase de audio/video.
+
+**6. Qué problemas encontraste y cómo los solucionaste:**
+
+Problema: El sketch.js original mezclaba red, tiempo y dibujo. Solución: Refactorizar el código separándolo en cliente, lógica de estado y renderizado.
+
+Problema: Strudel daba error al leer la URL "ws://localhost:8080". Solución: Usar .osc() vacío para que use la ruta por defecto.
 
 
 
 ## Bitácora de reflexión
+<img width="603" height="1145" alt="image" src="https://github.com/user-attachments/assets/4b0b9579-6daa-4e52-9690-2d1a3c3c89a3" />
+
