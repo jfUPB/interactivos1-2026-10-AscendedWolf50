@@ -4,6 +4,9 @@
 
 
 ## Bitácora de aplicación 
+### Actividad 02
+
+
 
 
 ## Bitácora de reflexión
