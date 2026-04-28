@@ -33,266 +33,746 @@ Un Adapter que intercepte el mensaje JSON complejo de Strudel, busque dentro de 
 ### Actividad 02
 **StrudelAdapter**
 ```js
-// StrudelAdapter.js
+const BaseAdapter = require("./BaseAdapter");
+const WebSocket = require('ws');
 
-/**
- * Normaliza los mensajes crudos que llegan desde Strudel.
- * Strudel envía los argumentos como un arreglo plano: ['cps', 0.5, 's', 'tr909bd', 'delta', 0.25]
- */
-function normalizeStrudelEvent(rawMessage) {
-    let params = {};
-    
-    // Extraemos los pares clave-valor del arreglo 'args'
-    if (rawMessage.args && Array.isArray(rawMessage.args)) {
-        for (let i = 0; i < rawMessage.args.length; i += 2) {
-            params[rawMessage.args[i]] = rawMessage.args[i+1];
-        }
+class StrudelAdapter extends BaseAdapter {
+  constructor({ port = 8080 } = {}) {
+    super();
+    this.port = port;
+    this.wss = null;
+  }
+
+  async connect() {
+    if (this.connected) return;
+
+    return new Promise((resolve, reject) => {
+      try {
+        // Levantamos un WebSocket Server específicamente para Strudel
+        this.wss = new WebSocket.Server({ port: this.port }, () => {
+          this.connected = true;
+          this.onConnected?.(`Strudel WebSocket escuchando en el puerto ${this.port}`);
+          resolve();
+        });
+
+        this.wss.on('connection', (ws) => {
+          ws.on('message', (message) => this._onMessage(message));
+        });
+
+        this.wss.on('error', (err) => {
+          this.onError?.(err.message);
+          reject(err);
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  async disconnect() {
+    if (!this.connected) return;
+    this.connected = false;
+    if (this.wss) {
+      this.wss.close();
+      this.wss = null;
     }
+    this.onDisconnected?.("Strudel WebSocket cerrado");
+  }
 
-    // Retornamos el contrato estandarizado que el frontend espera
-    return {
-        type: "strudel",
-        timestamp: rawMessage.timestamp,
-        payload: {
-            eventType: "noteEvent",
-            s: params.s || "unknown", // El tipo de sonido (ej. tr909bd)
-            delta: params.delta || 0.25 // Duración rítmica
+  getConnectionDetail() {
+    return `Strudel WS open (Port ${this.port})`;
+  }
+
+  _onMessage(message) {
+    try {
+      const rawMsg = JSON.parse(message);
+      let params = {};
+      
+      // Parsear los argumentos planos de Strudel
+      if (rawMsg.args && Array.isArray(rawMsg.args)) {
+        for (let i = 0; i < rawMsg.args.length; i += 2) {
+          params[rawMsg.args[i]] = rawMsg.args[i+1];
         }
-    };
+      }
+      
+      // Emitimos usando el método de BaseAdapter
+      // bridgeServer.js le añadirá automáticamente la propiedad {type: "strudel"}
+      this.onData?.({
+        strudelTimestamp: rawMsg.timestamp,
+        s: params.s || "unknown",
+        delta: params.delta || 0.25
+      });
+    } catch (e) {
+      // Si el mensaje no es JSON válido o es ruido, se ignora silenciosamente
+    }
+  }
 }
 
-module.exports = { normalizeStrudelEvent };
+module.exports = StrudelAdapter;
 ```
  **bridgeServer**
 ```js
-// bridgeServer.js
-const WebSocket = require('ws');
-const { normalizeStrudelEvent } = require('./StrudelAdapter'); // Importamos el adapter
+//   Uso:
+//     node bridgeServer.js --device sim --wsPort 8081 --hz 30
+//     node bridgeServer.js --device microbit --wsPort 8081 --serialPort COM5 --baud 115200
+//    node bridgeServer.js --device microbit --wsPort 8081
+//   node bridgeServer.js --device microbit-v2 --wsPort 8081
+//    node bridgeServer.js --device microbit-bin --wsPort 8081
+//    node bridgeServer.js --device strudel
+//   WS contract:
+//    * bridge To client:
+//        {type:"status", state:"ready|connected|disconnected|error", detail:"..."}
+//        {type:"microbit", x:int, y:int, btnA:bool, btnB:bool, t:ms}
+//        {type:"strudel", timestamp:ms, payload:{ s:string, delta:float }}
+//    * client To bridge:
+//        {cmd:"connect"} | {cmd:"disconnect"}
+//        {cmd:"setSimHz", hz:30}
+//        {cmd:"setLed", x:2, y:3, value:9}
 
-// 1. CONFIGURACIÓN
-const STRUDEL_PORT = 8080;   // Donde Strudel envía los datos
-const P5JS_PORT = 8081;      // Donde p5.js escuchará
 
-// 2. SERVIDORES WEBSOCKET
-const wssStrudel = new WebSocket.Server({ port: STRUDEL_PORT });
-const wssP5 = new WebSocket.Server({ port: P5JS_PORT });
+const { WebSocketServer } = require("ws");
+const { SerialPort } = require("serialport");
+const SimAdapter = require("./adapters/SimAdapter");
+const MicrobitAsciiAdapter = require("./adapters/MicrobitASCIIAdapter");
+const MicrobitV2Adapter = require("./adapters/MicrobitV2Adapter");
+const MicrobitBinaryAdapter = require("./adapters/MicrobitBinaryAdapter");
+const StrudelAdapter = require("./adapters/StrudelAdapter");
 
-console.log(`[SERVER] Escuchando a Strudel en ws://localhost:${STRUDEL_PORT}`);
-console.log(`[SERVER] Transmitiendo al Frontend en ws://localhost:${P5JS_PORT}`);
+const log = {
+  info: (...args) => console.log(`[${new Date().toISOString()}] [INFO]`, ...args),
+  warn: (...args) => console.warn(`[${new Date().toISOString()}] [WARN]`, ...args),
+  error: (...args) => console.error(`[${new Date().toISOString()}] [ERROR]`, ...args)
+};
 
-// 3. RECEPCIÓN Y NORMALIZACIÓN
-wssStrudel.on('connection', (ws) => {
-    console.log('[STRUDEL] Conectado al Bridge');
 
-    ws.on('message', (message) => {
-        try {
-            // 1. Parsear el mensaje crudo
-            const rawMsg = JSON.parse(message);
-            
-            // 2. Pasar el mensaje por el Adapter
-            const normalizedMsg = normalizeStrudelEvent(rawMsg);
-            
-            // 3. Preparar el payload final (contrato estable)
-            const payload = JSON.stringify(normalizedMsg);
-            
-            // 4. Hacer broadcast a todos los clientes web (p5.js)
-            wssP5.clients.forEach(client => {
-                if (client.readyState === WebSocket.OPEN) {
-                    client.send(payload);
-                }
-            });
+function getArg(name, def = null) {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i >= 0 && i + 1 < process.argv.length) return process.argv[i + 1];
+  return def;
+}
 
-        } catch (e) {
-            console.error('[ERROR] Procesando mensaje de Strudel:', e);
+function hasFlag(name) {
+  return process.argv.includes(`--${name}`);
+}
+
+function nowMs() { return Date.now(); }
+
+function safeJsonParse(s) {
+  try {
+    return JSON.parse(s);
+
+  } catch (e) {
+    log.warn("Failed to parse JSON: ", s, e);
+    return null;
+  }
+}
+
+function broadcast(wss, obj) {
+  const text = JSON.stringify(obj);
+  for (const client of wss.clients) {
+    if (client.readyState === 1) client.send(text);
+  }
+}
+
+function status(wss, state, detail = "") {
+  broadcast(wss, { type: "status", state, detail, t: nowMs() });
+}
+
+const DEVICE = (getArg("device", "sim") || "sim").toLowerCase();
+const WS_PORT = parseInt(getArg("wsPort", "8081"), 10);
+const SERIAL_PATH = getArg("serialPort", null);
+const BAUD = parseInt(getArg("baud", "115200"), 10);
+const SIM_HZ = parseInt(getArg("hz", "30"), 10);
+const VERBOSE = hasFlag("verbose");
+
+async function findMicrobitPort() {
+  const ports = await SerialPort.list();
+  const microbit = ports.find(p =>
+    p.vendorId && parseInt(p.vendorId, 16) === 0x0D28
+  );
+  return microbit?.path ?? null;
+}
+
+async function createAdapter() {
+  if (DEVICE === "strudel") {
+    log.info(`Strudel listener starting on port 8080`);
+    return new StrudelAdapter({ port: 8080 });
+  }
+
+  if (DEVICE === "microbit") {
+    const path = SERIAL_PATH ?? await findMicrobitPort();
+    if (!path) {
+      log.error("micro:bit not found. Use --serialPort to specify manually.");
+      process.exit(1);
+    }
+    log.info(`micro:bit found at ${path}`);
+    return new MicrobitAsciiAdapter({ path, baud: BAUD, verbose: VERBOSE });
+  }
+
+  if (DEVICE === "microbit-v2") {
+    const path = SERIAL_PATH ?? await findMicrobitPort();
+    if (!path) {
+      log.error("micro:bit not found. Use --serialPort to specify manually.");
+      process.exit(1);
+    }
+    log.info(`micro:bit found at ${path} (ASCII v2 Mode)`);
+    return new MicrobitV2Adapter({ path, baud: BAUD, verbose: VERBOSE });
+  }
+
+   if (DEVICE === "microbit-bin") {
+     const path = SERIAL_PATH ?? await findMicrobitPort();
+    if (!path) {
+     log.error("micro:bit not found. Use --serialPort to specify manually.");
+     process.exit(1);
+    }
+    return new MicrobitBinaryAdapter({ path, baud: BAUD });
+   }
+
+  return new SimAdapter({ hz: SIM_HZ });
+}
+
+async function main() {
+  const wss = new WebSocketServer({ port: WS_PORT });
+  log.info(`WS listening on ws://127.0.0.1:${WS_PORT} device=${DEVICE}`);
+
+  const adapter = await createAdapter();
+
+  adapter.onConnected = (detail) => {
+    log.info(`[ADAPTER] Device Connected: ${detail}`);
+    status(wss, "connected", detail);
+  };
+
+  adapter.onDisconnected = (detail) => {
+    log.warn(`[ADAPTER] Device Disconnected: ${detail}`);
+    status(wss, "disconnected", detail);
+  };
+
+  adapter.onError = (detail) => {
+    log.error(`[ADAPTER] Device Error: ${detail}`);
+    status(wss, "error", detail);
+  };
+
+  adapter.onData = (d) => {
+    // Clasificamos el payload según el dispositivo seleccionado
+    if (DEVICE === "strudel") {
+      broadcast(wss, {
+        type: "strudel",
+        timestamp: d.strudelTimestamp,
+        payload: {
+          s: d.s,
+          delta: d.delta
         }
-    });
-});
+      });
+    } else {
+      broadcast(wss, {
+        type: "microbit",
+        x: d.x,
+        y: d.y,
+        btnA: !!d.btnA,
+        btnB: !!d.btnB,
+        t: nowMs(),
+      });
+    }
+  };
 
-wssP5.on('connection', (ws) => {
-    console.log('[FRONTEND] p5.js se ha conectado al Bridge');
+  status(wss, "ready", `bridge up (${DEVICE})`);
+
+  wss.on("connection", (ws, req) => {
+    log.info(`[NETWORK] Remote Client connected from ${req.socket.remoteAddress}. Total clients: ${wss.clients.size}`);
+
+    const state = adapter.connected ? "connected" : "ready";
+
+    const detail = adapter.connected
+      ? adapter.getConnectionDetail()
+      : `bridge (${DEVICE})`;
+
+    ws.send(JSON.stringify({ type: "status", state, detail, t: nowMs() }));
+
+    ws.on("message", async (raw) => {
+      const msg = safeJsonParse(raw.toString("utf8"));
+      if (!msg) return;
+
+      if (msg.cmd === "connect") {
+        log.info(`[NETWORK] Client requested adapter connect`);
+
+        if (adapter.connected) {
+          log.info(`[HW-POLICY] Adapter already open. Sending current status to incoming client.`);
+          ws.send(JSON.stringify({ type: "status", state: "connected", detail: adapter.getConnectionDetail(), t: nowMs() }));
+          return;
+        }
+        
+        try {
+          await adapter.connect();
+        } catch (e) {
+          const detail = `connect failed: ${e.message || e}`;
+          log.error(`[ADAPTER] ` + detail);
+          status(wss, "error", detail);
+        }
+        return;
+      }
+
+      if (msg.cmd === "disconnect") {
+        log.info(`[NETWORK] Client requested adapter disconnect`);
+        if (wss.clients.size > 1) {
+          log.info(`[HW-POLICY] Adapater kept open. Shared with ${wss.clients.size - 1} other active client(s).`);
+          ws.send(JSON.stringify({ type: "status", state: "disconnected", detail: "logical disconnect only", t: nowMs() }));
+          return;
+        }
+        
+        try {
+          await adapter.disconnect();
+        } catch (e) {
+          const detail = `disconnect failed: ${e.message || e}`;
+          log.error(`[ADAPTER] ` + detail);
+          status(wss, "error", detail);
+        }
+        return;
+      }
+
+      if (msg.cmd === "setSimHz" && adapter instanceof SimAdapter) {
+        log.info(`Setting Sim Hz to ${msg.hz}`);
+        await adapter.handleCommand(msg);
+        status(wss, "connected", `sim hz=${adapter.hz}`);
+        return;
+      }
+
+      if (msg.cmd === "setLed") {
+        try {
+          await adapter.handleCommand?.(msg);
+        } catch (e) {
+          const detail = `command failed: ${e.message || e}`;
+          log.error(`[ADAPTER] ` + detail);
+          status(wss, "error", detail);
+        }
+        return;
+      }
+    });
+
+    ws.on("close", () => {
+      log.info(`[NETWORK] Remote Client disconnected. Total clients left: ${wss.clients.size}`);
+      if (wss.clients.size === 0) {
+        log.info("[HW-POLICY] No more remote clients. Auto-disconnecting adapter device to free resources...");
+        adapter.disconnect();
+      }
+    });
+  });
+
+  // Strudel levanta su propio servidor WS, por lo que lo iniciamos automáticamente
+  if (DEVICE === "sim" || DEVICE === "strudel") {
+    await adapter.connect();
+  }
+}
+
+main().catch((e) => {
+  log.error("Fatal:", e);
+  process.exit(1);
 });
 ```
 **bridgeClient**
 ```js
-// bridgeClient.js
+class BridgeClient {
+  constructor(url = "ws://127.0.0.1:8081") {
+    this._url = url;
+    this._ws = null;
+    this._isOpen = false;
 
-// Conectamos al puerto 8081 que configuramos en bridgeServer.js
-const socket = new WebSocket('ws://localhost:8081');
+    this._onData = null;
+    this._onConnect = null;
+    this._onDisconnect = null;
+    this._onStatus = null;
+  }
 
-socket.onopen = () => {
-    console.log('[CLIENTE] Conectado al Bridge (Frontend)');
-};
+  get isOpen() {
+    return this._isOpen;
+  }
 
-socket.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
+  onData(callback) { this._onData = callback; }
+  onConnect(callback) { this._onConnect = callback; }
+  onDisconnect(callback) { this._onDisconnect = callback; }
+  onStatus(callback) { this._onStatus = callback; }
 
-    // Verificamos que sea un mensaje de nuestra fuente Strudel
-    if (msg.type === "strudel") {
-        
-        // ¡Magia! Como ya lo normalizamos en el servidor, no hay que hacer bucles raros.
-        // Simplemente pasamos el mensaje completo a nuestra capa de estado.
-        // (Asegúrate de que esta función exista y esté accesible en tu sistema)
-        encolarEventoStrudel(msg); 
+  open() {
+    if (this._ws && this._ws.readyState === WebSocket.OPEN) {
+      if (!this._isOpen) this.send({ cmd: "connect" });
+      return;
     }
-};
 
-socket.onerror = (error) => {
-    console.error('[CLIENTE] Error en WebSocket:', error);
-};
+    if (this._ws) {
+      this.close();
+    }
+
+    this._ws = new WebSocket(this._url);
+
+    this._ws.onopen = () => {
+      this.send({ cmd: "connect" });
+    };
+
+    this._ws.onmessage = (event) => {
+      // Esperamos JSON normalizado desde el bridge
+      let msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch (e) {
+        console.warn("WS message is not JSON:", event.data);
+        return;
+      }
+
+      // Convención mínima:
+      // - {type:"status", state:"...", detail:"..."}
+      // - {type:"microbit", x:..., y:..., btnA:..., btnB:...}
+      if (msg.type === "status") {
+        this._onStatus?.(msg);
+
+        if (msg.state === "connected") {
+          this._isOpen = true;
+          this._onConnect?.();
+        }
+
+        if (msg.state === "disconnected" || msg.state === "error" || msg.state === "ready") {
+          this._isOpen = false; 
+          this._onDisconnect?.();
+          if (msg.state === "error") {
+            this._ws?.close();
+            this._ws = null;
+          }          
+        }
+        return;
+      }
+
+      if (msg.type === "microbit" || msg.type === "strudel") {
+        // payload ya normalizado
+        this._onData?.(msg);
+        return;
+      }
+    };
+
+    this._ws.onerror = (err) => {
+      console.warn("WS error:", err);
+    };
+
+    this._ws.onclose = () => {
+      this._handleDisconnect();
+    };
+  }
+
+  close() {
+    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return;
+
+    try {
+      this.send({ cmd: "disconnect" });
+      this._isOpen = false;
+    } catch (e) {
+      console.warn("Failed to send disconnect command:", e);
+    }
+  }
+
+  send(obj) {
+    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return;
+    this._ws.send(JSON.stringify(obj));
+  }
+
+  _handleDisconnect() {
+    this._isOpen = false;
+    this._ws = null;
+    this._onDisconnect?.();
+  }
+}
+
 ```
 **sketch**
 ```js
-let eventQueue = [];
-let activeAnimations = []; 
-const LATENCY_CORRECTION = 0; 
+const EVENTS = {
+    CONNECT: "CONNECT",
+    DISCONNECT: "DISCONNECT",
+    DATA: "DATA",
+    STRUDEL_DATA: "STRUDEL_DATA",
+    KEY_PRESSED: "KEY_PRESSED",
+    KEY_RELEASED: "KEY_RELEASED",
+};
+
+class PainterTask extends FSMTask {
+    constructor() {
+        super();
+
+        // Variables visuales Micro:bit
+        this.c = color(181, 157, 0);
+        this.lineSize = 100;
+        this.angle = 0;
+        this.clickPosX = 0;
+        this.clickPosY = 0;
+
+        // Estado de recepción Micro:bit
+        this.rxData = {
+            x: 0,
+            y: 0,
+            btnA: false,
+            btnB: false,
+            prevA: false,
+            prevB: false,
+            ready: false
+        };
+
+        // Estado y Scheduling para Strudel
+        this.eventQueue = [];
+        this.activeAnimations = [];
+        this.latencyCorrection = 0;
+
+        this.transitionTo(this.estado_esperando);
+    }
+
+    estado_esperando = (ev) => {
+        if (ev.type === "ENTRY") {
+            cursor();
+            console.log("Waiting for connection...");
+        } else if (ev.type === EVENTS.CONNECT) {
+            this.transitionTo(this.estado_corriendo);
+        }
+    };
+
+    estado_corriendo = (ev) => {
+        if (ev.type === "ENTRY") {
+            noCursor();
+            strokeWeight(0.75);
+            background(255);
+            console.log("System ready to draw (Microbit + Strudel)");
+            
+            // Reiniciar estado
+            this.rxData.ready = false;
+            this.eventQueue = [];
+            this.activeAnimations = [];
+        }
+
+        else if (ev.type === EVENTS.DISCONNECT) {
+            this.transitionTo(this.estado_esperando);
+        }
+
+        else if (ev.type === EVENTS.DATA) {
+            this.updateLogic(ev.payload);
+        }
+
+        else if (ev.type === EVENTS.STRUDEL_DATA) {
+            // Encolar el evento musical con su timestamp
+            this.eventQueue.push({
+                timestamp: ev.payload.timestamp,
+                sound: ev.payload.payload.s,
+                delta: ev.payload.payload.delta
+            });
+            // Ordenar para mantener la sincronización si llegan desordenados
+            this.eventQueue.sort((a, b) => a.timestamp - b.timestamp);
+        }
+
+        else if (ev.type === EVENTS.KEY_PRESSED) {
+            this.handleKeys(ev.keyCode, ev.key);
+        }
+
+        else if (ev.type === EVENTS.KEY_RELEASED) {
+            this.handleKeyRelease(ev.keyCode, ev.key);
+        }
+
+        else if (ev.type === "EXIT") {
+            cursor();
+        }
+    };
+
+    updateLogic(data) {
+        this.rxData.ready = true;
+        this.rxData.x = map(data.x, -2048, 2047, 0, width);
+        this.rxData.y = map(data.y, -2048, 2047, 0, height);
+        this.rxData.btnA = data.btnA;
+        this.rxData.btnB = data.btnB;
+
+        if (this.rxData.btnA && !this.prevA) {
+            this.lineSize = random(50, 160);
+            this.clickPosX = this.rxData.x;
+            this.clickPosY = this.rxData.y;
+            console.log("A pressed");
+        }
+
+        if (!this.rxData.btnB && this.prevB) {
+            this.c = color(random(255), random(255), random(255), random(80, 100));
+            console.log("B released");
+        }
+
+        this.prevA = this.rxData.btnA;
+        this.prevB = this.rxData.btnB;
+    }
+}
+
+let painter;
+let bridge;
+let connectBtn;
+const renderer = new Map();
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
-  rectMode(CENTER);
-  noStroke();
+    createCanvas(windowWidth, windowHeight);
+    background(255);
+    painter = new PainterTask();
+    bridge = new BridgeClient();
 
-  // ¡OJO! Ya no hay WebSocket aquí. 
-  // La conexión la maneja bridgeClient.js de forma independiente.
+    bridge.onConnect(() => {
+        connectBtn.html("Disconnect");
+        painter.postEvent({ type: EVENTS.CONNECT });
+    });
+
+    bridge.onDisconnect(() => {
+        connectBtn.html("Connect");
+        painter.postEvent({ type: EVENTS.DISCONNECT });
+    });
+
+    bridge.onStatus((s) => {
+        console.log("BRIDGE STATUS:", s.state, s.detail ?? "");
+    });
+
+    bridge.onData((data) => {
+        // Enrutador de datos según la fuente
+        if (data.type === "strudel") {
+            painter.postEvent({ type: EVENTS.STRUDEL_DATA, payload: data });
+        } else {
+            painter.postEvent({
+                type: EVENTS.DATA, payload: {
+                    x: data.x,
+                    y: data.y,
+                    btnA: data.btnA,
+                    btnB: data.btnB
+                }
+            });
+        }
+    });
+
+    connectBtn = createButton("Connect");
+    connectBtn.position(10, 10);
+    connectBtn.mousePressed(() => {
+        if (bridge.isOpen) bridge.close();
+        else bridge.open();
+    });
+
+    renderer.set(painter.estado_corriendo, drawRunning);
 }
 
-// ==========================================
-// 1. RECEPCIÓN DE DATOS (Llamado por bridgeClient.js)
-// ==========================================
-function encolarEventoStrudel(msg) {
-  // Como tu StrudelAdapter.js ya normalizó el mensaje, 
-  // aquí entra limpiecito (msg.payload).
-  eventQueue.push({ 
-      timestamp: msg.timestamp, 
-      sound: msg.payload.s,
-      delta: msg.payload.delta
-  });
-
-  // Ordenamos para asegurar que los eventos se ejecuten en el orden correcto
-  eventQueue.sort((a, b) => a.timestamp - b.timestamp);
-}
-
-// ==========================================
-// 2. SCHEDULING / ESTADO (Tu updateLogic)
-// ==========================================
-function updateLogic() {
-  let now = Date.now() + LATENCY_CORRECTION;
-
-  // Revisamos si el tiempo de algún evento en la cola ya llegó
-  while (eventQueue.length > 0 && now >= eventQueue[0].timestamp) {
-      let ev = eventQueue.shift();
-
-      // Nace una nueva animación activa
-      activeAnimations.push({
-          startTime: ev.timestamp,
-          duration: ev.delta * 1000, 
-          type: ev.sound,
-          x: random(width * 0.2, width * 0.8), 
-          y: random(height * 0.2, height * 0.8),
-          color: getColorForSound(ev.sound)
-      });
-  }
-}
-
-// ==========================================
-// 3. MOTOR DE JUEGO / LOOP PRINCIPAL
-// ==========================================
 function draw() {
-  background(0, 30); 
+    painter.update();
+    renderer.get(painter.state)?.();
+}
 
-  // PASO A: Actualizar la lógica y el tiempo
-  updateLogic();
+function drawRunning() {
+    // Fondo con alfa para crear estela de las animaciones
+    background(255, 40);
 
-  // PASO B: Renderizar (Lo que sería tu drawRunning)
-  let now = Date.now() + LATENCY_CORRECTION;
-  
-  for (let i = activeAnimations.length - 1; i >= 0; i--) {
-    let anim = activeAnimations[i];
-    let elapsed = now - anim.startTime;
-    let progress = elapsed / anim.duration;
+    // ==========================================
+    // 1. RENDERIZADO STRUDEL (Scheduling)
+    // ==========================================
+    let now = Date.now() + painter.latencyCorrection;
 
-    if (progress <= 1.0) {
-      dibujarElemento(anim, progress);
-    } else {
-      activeAnimations.splice(i, 1); // Muere la animación
+    // A. Extraer eventos cuyo tiempo ya se cumplió
+    while (painter.eventQueue.length > 0 && now >= painter.eventQueue[0].timestamp) {
+        let ev = painter.eventQueue.shift();
+
+        painter.activeAnimations.push({
+            startTime: ev.timestamp,
+            duration: ev.delta * 1000,
+            type: ev.sound,
+            x: random(width * 0.2, width * 0.8),
+            y: random(height * 0.2, height * 0.8),
+            c: getColorForSound(ev.sound)
+        });
     }
-  }
+
+    // B. Dibujar animaciones activas
+    for (let i = painter.activeAnimations.length - 1; i >= 0; i--) {
+        let anim = painter.activeAnimations[i];
+        let elapsed = now - anim.startTime;
+        let progress = elapsed / anim.duration;
+
+        if (progress <= 1.0) {
+            dibujarElemento(anim, progress);
+        } else {
+            painter.activeAnimations.splice(i, 1);
+        }
+    }
+
+    // ==========================================
+    // 2. RENDERIZADO MICRO:BIT
+    // ==========================================
+    let mb = painter.rxData;
+    if (!mb.ready) return;
+
+    if (mb.btnA) {
+        let x = mb.x;
+        let y = mb.y;
+        push();
+        translate(x, y);
+        rotate(radians(painter.angle));
+        stroke(painter.c);
+        strokeWeight(1.5);
+        line(0, 0, painter.lineSize, painter.lineSize);
+        painter.angle += 1;
+        pop();
+    }
 }
 
 // ==========================================
-// 4. FUNCIONES DE DIBUJO (Se mantienen intactas)
+// FUNCIONES DE DIBUJO STRUDEL
 // ==========================================
 function dibujarElemento(anim, p) {
-  push();
-  const color = anim.color;
-  
-  switch (anim.type) {
-    case 'tr909bd':
-      dibujarBombo(p, color);
-      break;
-    case 'tr909sd':
-      dibujarCaja(p, color);
-      break;
-    case 'tr909hh':
-    case 'tr909oh':
-      dibujarHat(anim, p, color);
-      break;
-    default:
-      dibujarDefault(anim, p, color);
-      break;
-  }
-  pop();
+    push();
+    const c = anim.c;
+    
+    switch (anim.type) {
+        case 'tr909bd': dibujarBombo(anim, p, c); break;
+        case 'tr909sd': dibujarCaja(anim, p, c); break;
+        case 'tr909hh': 
+        case 'tr909oh': dibujarHat(anim, p, c); break;
+        default: dibujarDefault(anim, p, c); break;
+    }
+    pop();
 }
 
-function dibujarBombo(p, c) {
-  let d = lerp(100, 600, p);
-  let alpha = lerp(255, 0, p);
-  fill(c[0], c[1], c[2], alpha);
-  circle(width / 2, height / 2, d);
+function dibujarBombo(anim, p, c) {
+    let d = lerp(100, 600, p);
+    let alpha = lerp(255, 0, p);
+    fill(c[0], c[1], c[2], alpha);
+    noStroke();
+    circle(anim.x, anim.y, d);
 }
 
-function dibujarCaja(p, c) {
-  let w = lerp(width, 0, p);
-  let alpha = lerp(255, 0, p);
-  fill(c[0], c[1], c[2], alpha);
-  rect(width / 2, height / 2, w, 50);
+function dibujarCaja(anim, p, c) {
+    let w = lerp(width, 0, p);
+    let alpha = lerp(255, 0, p);
+    fill(c[0], c[1], c[2], alpha);
+    noStroke();
+    rect(anim.x, anim.y, w, 50);
 }
 
 function dibujarHat(anim, p, c) {
-  let sz = lerp(40, 0, p);
-  fill(c[0], c[1], c[2]);
-  rect(anim.x, anim.y, sz, sz);
+    let sz = lerp(40, 0, p);
+    fill(c[0], c[1], c[2]);
+    noStroke();
+    rect(anim.x, anim.y, sz, sz);
 }
 
 function dibujarDefault(anim, p, c) {
-  let size = lerp(100, 0, p);
-  let angle = p * TWO_PI;
-  translate(anim.x, anim.y);
-  rotate(angle);
-  stroke(c[0], c[1], c[2]);
-  strokeWeight(2);
-  noFill();
-  rect(0, 0, size, size);
-  line(-size, 0, size, 0);
-  line(0, -size, 0, size);
-  noStroke();
-  fill(255, 150);
-  textSize(20);
-  text(anim.type, 10, 10);
+    let size = lerp(100, 0, p);
+    let angle = p * TWO_PI;
+    translate(anim.x, anim.y);
+    rotate(angle);
+    stroke(c[0], c[1], c[2]);
+    strokeWeight(2);
+    noFill();
+    rect(0, 0, size, size);
+    line(-size, 0, size, 0);
+    line(0, -size, 0, size);
 }
 
 function getColorForSound(s) {
-  const colors = {
-    'tr909bd': [255, 0, 80],
-    'tr909sd': [0, 200, 255],
-    'tr909hh': [255, 255, 0],
-    'tr909oh': [255, 150, 0]
-  };
-  if (colors[s]) return colors[s];
-  let charCode = s.charCodeAt(0) || 0;
-  return [(charCode * 123) % 255, (charCode * 456) % 255, (charCode * 789) % 255];
-}  
+    if (s.includes('bd')) return [255, 0, 80];
+    if (s.includes('sd') || s.includes('cp')) return [0, 200, 255];
+    if (s.includes('hh') || s.includes('oh')) return [255, 255, 0];
+    return [0, 0, 0];
+}
 
-function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+}
 ```
 **Index**
 ```html
@@ -301,9 +781,10 @@ function windowResized() { resizeCanvas(windowWidth, windowHeight); }
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>P5 Visuals</title>
+  <title>Painter – Web Serial API</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.js"></script>
+  <script src="fsm.js"></script>
   <script src="bridgeClient.js"></script>
   <script src="sketch.js"></script>
 </head>
