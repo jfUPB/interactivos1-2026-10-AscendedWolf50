@@ -5,6 +5,44 @@
 
 ## Bitácora de aplicación 
 ### Actividad 01
+
+<img width="1223" height="785" alt="image" src="https://github.com/user-attachments/assets/63393ab7-0220-4d2a-acf9-3a33ed2bdfec" />
+
+
+#### Los Adapters que vas a usar
+Se están utilizando tres adaptadores independientes para respetar el principio de responsabilidad única en el backend:
+
+**MicrobitAsciiAdapter:** Se encarga de abrir el puerto serial (a 115200 baudios), leer las tramas en formato CSV plano y normalizar los datos del acelerómetro y botones.
+
+**StrudelAdapter:** Levanta un servidor WebSocket local en el puerto 8080 exclusivo para escuchar los eventos rítmicos generados por el motor de audio.
+
+**OscAdapter:** Levanta un servidor UDP en el puerto 8000 dedicado a interceptar los paquetes de control enviados desde la interfaz y extraer sus direcciones (address) y argumentos (args).
+
+#### El contrato de mensajes de cada fuente
+El servidor bridgeServer.js empaqueta la salida de los tres adaptadores bajo un estándar predecible para el cliente web:
+
+**Contrato de Micro:bit:**
+{ type: "microbit", x: int, y: int, btnA: bool, btnB: bool, t: ms }
+
+**Contrato de Strudel:**
+{ type: "strudel", timestamp: ms, payload: { s: string, delta: float } }
+
+**Contrato de Open Stage Control:**
+{ type: "osc", payload: { address: string, args: array } }
+
+#### Pruebas técnicas de integración
+Se valida la concurrencia del sistema ejecutando el comando --device all. Tras confirmar la apertura de los tres puertos (Serial, WS 8080 y UDP 8000), se enviaron datos simultáneos desde las tres fuentes. El frontend procesó y enrutó la información correctamente a sus respectivos componentes (updateLogic para Micro:bit, eventQueue para Strudel y persistentState para OSC), logrando un renderizado estable y sin pérdida de rendimiento.
+
+#### Problemas encontrados y soluciones
+
+Exclusion de dispositivos en el backend: El servidor original solo permitía ejecutar un dispositivo a la vez.
+
+**Solucion:** Se refactorizó la funcion main() implementando un arreglo de adaptadores activos, lo que permite la inicialización simultánea de los tres módulos mediante el comando --device all.
+
+**Error de parseo en Micro:bit:** El uso de una trama compleja con checksum generaba errores de validación al leer los datos.
+
+**Solucion:** Se simplificó el script de la placa para que emita una trama en formato CSV estándar (X,Y,btnA,btnB\n), asegurando la compatibilidad directa con el MicrobitAsciiAdapter.
+
 **bridgeServer.js**
 ```js
 //   Uso Unidad 8 (Performance):
@@ -546,6 +584,9 @@ while True:
     uart.write(trama)
     sleep(50) # 20Hz (milisegundos) para un dibujo fluido
 ```
+
+
+
 
 
 
