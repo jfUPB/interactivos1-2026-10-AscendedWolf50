@@ -586,8 +586,87 @@ while True:
 ```
 
 
+### Actividad 2
+
+**1. El concepto de la obra:**
+La obra se titula "Motor de Combate Audiovisual". Es una simulación interactiva basada en los sistemas de evaluación de estilo (Style Rank) utilizados en el género de videojuegos Hack and Slash. La pieza demuestra cómo un ecosistema digital responde en tiempo real a la acumulación de acciones del usuario, escalando desde un estado base de exploración hasta una sobrecarga sensorial de audio y video.
+
+**2. El rol de micro:bit, Strudel y Open Stage Control:**
+
+micro:bit (Interfaz de Ataque): Funciona como el dispositivo de entrada física. Los datos espaciales del acelerómetro trazan vectores direccionales en un lienzo secundario, simulando el registro visual de impactos continuos. El Botón B funciona como una interrupción de estado para limpiar el buffer visual y reiniciar el sistema.
+
+Strudel (Motor de Audio Dinámico): Actúa como el secuenciador adaptativo. Modifica el estado del audio introduciendo nuevas capas instrumentales (percusión, bajos, guitarras) y aumentando los BPM para reflejar el incremento en la intensidad de la simulación.
+
+Open Stage Control (Gestor de Variables Globales): Controla el HUD (interfaz) y los parámetros del entorno. El selector de color indica el nivel actual de la simulación; el fader modifica el multiplicador de escala de las instancias visuales; y el botón glitch altera las coordenadas, emulando un Screen Shake de daño crítico.
+
+**3. Las decisiones visuales, musicales y performáticas:**
+
+Musicales: Estructura progresiva en la escala de Mi Menor. Integración de percusión industrial, bajos sintetizados y guitarras con distorsión para crear una atmósfera densa.
+
+Visuales: Renderizado sobre fondo negro absoluto para maximizar el contraste. Uso simultáneo de geometría efímera (eventos rítmicos) y estelas permanentes (gestos físicos) para saturar el campo visual.
+
+Performáticas (Progresión en 5 Fases): La ejecución escala gradualmente. Comienza con trazos lentos y colores fríos. A medida que avanza el tiempo, se introducen movimientos rápidos, se aumenta la escala paramétrica en OSC y se cambia a colores cálidos. Culmina con la activación de la distorsión global y movimientos erráticos, finalizando con un corte total de los estímulos (Botón B + Stop).
+
+**4. Los cambios realizados entre la iteración ingenieril y la iteración estética:**
+Durante la fase ingenieril, la función background() con opacidad borraba todos los elementos simultáneamente. Para la iteración estética, se implementó un createGraphics (buffer secundario) en el cliente. Este cambio arquitectónico permitió aislar la capa de interacción del micro:bit, garantizando que el historial de movimientos físicos permanezca acumulado en pantalla independientemente de la actualización de las figuras generadas por los eventos de Strudel.
 
 
+#### Fase 1
+```
+setcps(1.2)
+const atmo = s("gm_choir_aahs").note("E3").room(0.8).gain(0.5)
+const bass = s("gm_synth_bass_1(3,8)").note("E1").distort(0.5).gain(0.8)
+const drums = s("bassdrum2 ~ ~ ~")
+const pat = stack(atmo, bass, drums)
+$: stack(pat.gain('0.08'), pat.osc())
+```
+### Fase 2
+```
+setcps(1.3)
+const atmo = s("gm_choir_aahs").note("E3").room(0.8).gain(0.5)
+const bass = s("gm_synth_bass_1*4").note("E1 E1 G1 E1").distort(0.5).gain(0.8)
+const drums = s("bassdrum2 ~ snare_modern ~")
+const hats = s("hihat*4").gain(0.6)
+const pat = stack(atmo, bass, drums, hats)
+$: stack(pat.gain('0.08'), pat.osc())
+```
+### Fase 3
+```
+setcps(1.4)
+const atmo = s("gm_choir_aahs").note("E3 G3").room(0.8).gain(0.4)
+const bass = s("gm_synth_bass_1*4").note("E1 E1 G1 E1").distort(0.6).gain(0.8)
+const drums = s("bassdrum2 [~ bassdrum2] snare_modern ~")
+const hats = s("hihat*8").gain(0.6)
+const guitar = s("gm_distortion_guitar(5,8)").note("E2 G2 A2 B2").distort(0.3).gain(0.7)
+const pat = stack(atmo, bass, drums, hats, guitar)
+$: stack(pat.gain('0.08'), pat.osc())
+```
+### Fase 4
+```
+setcps(1.5)
+const atmo = s("gm_choir_aahs").note("E4").room(0.8).gain(0.4)
+const bass = s("gm_synth_bass_2*8").note("E1 G1 E1 B1").distort(0.8).gain(0.8)
+const drums = s("bassdrum2*2 [~ snare_modern] bassdrum2*2 snare_modern")
+const hats = s("hihat*8").gain(0.6)
+const guitar = s("gm_distortion_guitar(5,8)").note("E2 G2 A2 B2").distort(0.3).gain(0.7)
+const arp = s("gm_lead_2_sawtooth*16").note("E4 G4 B4 D5").room(0.5).gain(0.4)
+const pat = stack(atmo, bass, drums, hats, guitar, arp)
+$: stack(pat.gain('0.08'), pat.osc())
+```
+### Fase 5
+```
+setcps(1.6)
+const atmo = s("gm_choir_aahs").note("E4").room(0.8).gain(0.4)
+const bass = s("gm_synth_bass_2*8").note("E1 G1 Bb1 A1").distort(1).gain(0.8)
+const kicks = s("bassdrum2*4")
+const snare = s("[~ snare_modern]*2")
+const hats = s("hihat*16").gain(0.6)
+const guitar = s("gm_distortion_guitar*4").note("E2 G2 Bb2 A2").distort(0.4).gain(0.7)
+const arp = s("gm_lead_2_sawtooth*16").note("E4 G4 B4 D5").room(0.5).gain(0.4)
+const alarm = s("gm_synth_brass_1(3,8)").note("E5").room(0.8).gain(0.6)
+const pat = stack(atmo, bass, kicks, snare, hats, guitar, arp, alarm)
+$: stack(pat.gain('0.08'), pat.osc())
+```
 
 
 ## Bitácora de reflexión
