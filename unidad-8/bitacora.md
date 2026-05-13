@@ -668,5 +668,9 @@ const pat = stack(atmo, bass, kicks, snare, hats, guitar, arp, alarm)
 $: stack(pat.gain('0.08'), pat.osc())
 ```
 
+### Actividad 3
+<img width="2559" height="249" alt="image" src="https://github.com/user-attachments/assets/5a6c1041-2dbd-4ea9-9408-30b27d366915" />
+
+
 
 ## Bitácora de reflexión
